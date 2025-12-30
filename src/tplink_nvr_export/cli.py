@@ -85,7 +85,7 @@ def main(ctx, debug: bool, debug_file: str):
 
 @main.command()
 @click.option("--host", "-h", required=True, help="NVR IP address or hostname")
-@click.option("--port", "-p", default=20443, help="OpenAPI port (default: 20443)")
+@click.option("--port", "-p", default=443, help="Port (default: 443 for web, 20443 for openapi)")
 @click.option("--user", "-u", required=True, help="Admin username")
 @click.option("--password", "-P", required=True, prompt=True, hide_input=True, help="Admin password")
 @click.option("--channel", "-c", required=True, type=int, help="Camera channel ID (1-based)")
@@ -114,6 +114,8 @@ def export(
 ):
     """Export recordings from NVR for a time range.
     
+    Uses the web interface API (/stok/ds) for recording access.
+    
     \b
     Examples:
         # Export channel 1 for a specific day
@@ -124,13 +126,15 @@ def export(
         nvr-export --debug export -h 192.168.1.100 -u admin -c 1 \\
             -s "2024-12-28" -e "2024-12-29" -o ./exports
     """
+    from .web_client import WebClient, WebClientError
+    
     output_dir = Path(output)
     
     if not quiet:
-        click.echo(f"Connecting to NVR at {host}:{port}...")
+        click.echo(f"Connecting to NVR web interface at {host}:{port}...")
     
     try:
-        with NVRClient(host, user, password, port, verify_ssl=not no_ssl_verify) as client:
+        with WebClient(host, user, password, port, verify_ssl=not no_ssl_verify) as client:
             if not quiet:
                 click.echo(f"Searching recordings: Channel {channel}, {start} to {end}")
             
@@ -156,11 +160,8 @@ def export(
             if not quiet:
                 click.echo(f"\nSuccessfully exported {len(downloaded)} recordings to {output_dir}")
                 
-    except AuthenticationError as e:
-        click.echo(f"Authentication failed: {e}", err=True)
-        sys.exit(1)
-    except NVRAPIError as e:
-        click.echo(f"NVR API error: {e}", err=True)
+    except WebClientError as e:
+        click.echo(f"Web interface error: {e}", err=True)
         sys.exit(1)
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
