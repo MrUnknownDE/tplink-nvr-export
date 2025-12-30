@@ -43,10 +43,11 @@ dev = [
 
 [project.scripts]
 nvr-export = "tplink_nvr_export.cli:main"
+nvr-export-gui = "tplink_nvr_export.gui:main"
 
 [project.urls]
-Homepage = "https://github.com/johannes/tplink-nvr-export"
-Repository = "https://github.com/johannes/tplink-nvr-export"
+Homepage = "https://github.com/mrunknownde/tplink-nvr-export"
+Repository = "https://github.com/mrunknownde/tplink-nvr-export"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tplink_nvr_export"]

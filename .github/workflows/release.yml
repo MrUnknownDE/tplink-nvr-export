@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-windows-cli:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
           pip install pyinstaller
           pip install -e .
           
-      - name: Build executable
+      - name: Build CLI executable
         run: |
           pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
           
@@ -34,8 +34,34 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nvr-export-windows
+          name: nvr-export-cli-windows
           path: dist/nvr-export.exe
+
+  build-windows-gui:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -e .
+          
+      - name: Build GUI executable
+        run: |
+          pyinstaller --onefile --name nvr-export-gui --windowed --icon=NONE src/tplink_nvr_export/gui.py
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvr-export-gui-windows
+          path: dist/nvr-export-gui.exe
           
   build-linux:
     runs-on: ubuntu-latest
@@ -53,7 +79,7 @@ jobs:
           pip install pyinstaller
           pip install -e .
           
-      - name: Build executable
+      - name: Build CLI executable
         run: |
           pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
           
@@ -71,17 +97,23 @@ jobs:
           path: dist/nvr-export
 
   release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows-cli, build-windows-gui, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
-      - name: Download Windows artifact
+      - name: Download Windows CLI artifact
         uses: actions/download-artifact@v4
         with:
-          name: nvr-export-windows
-          path: windows
+          name: nvr-export-cli-windows
+          path: windows-cli
+          
+      - name: Download Windows GUI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nvr-export-gui-windows
+          path: windows-gui
           
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
@@ -91,13 +123,29 @@ jobs:
           
       - name: Rename artifacts
         run: |
-          mv windows/nvr-export.exe nvr-export-windows.exe
+          mv windows-cli/nvr-export.exe nvr-export-cli-windows.exe
+          mv windows-gui/nvr-export-gui.exe nvr-export-gui-windows.exe
           mv linux/nvr-export nvr-export-linux
           
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            nvr-export-windows.exe
+            nvr-export-cli-windows.exe
+            nvr-export-gui-windows.exe
             nvr-export-linux
+          body: |
+            ## Downloads
+            
+            | File | Description |
+            |------|-------------|
+            | `nvr-export-gui-windows.exe` | 🖥️ Windows GUI (double-click to run) |
+            | `nvr-export-cli-windows.exe` | ⌨️ Windows CLI (for automation/scripts) |
+            | `nvr-export-linux` | 🐧 Linux CLI |
+            
+            ### Quick Start (Windows GUI)
+            1. Download `nvr-export-gui-windows.exe`
+            2. Double-click to run
+            3. Enter NVR IP, credentials, and time range
+            4. Click "Export"
           generate_release_notes: true

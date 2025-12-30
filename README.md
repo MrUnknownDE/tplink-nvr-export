@@ -11,6 +11,7 @@ A CLI tool to export video recordings from TP-Link Vigi NVRs over a specified ti
 - 🎯 Filter by recording type (continuous, motion, alarm)
 - 📊 Progress bar during downloads
 - 🔒 Secure authentication via OpenAPI
+- 🖥️ **Windows GUI** - No command line needed!
 
 ## Requirements
 
@@ -20,22 +21,29 @@ A CLI tool to export video recordings from TP-Link Vigi NVRs over a specified ti
 
 ## Installation
 
-### Option 1: Download Windows Executable (Recommended for Windows)
+### Option 1: Download Windows GUI (Recommended)
 
-1. Go to [Releases](https://github.com/johannes/tplink-nvr-export/releases)
-2. Download `nvr-export-windows.exe`
+1. Go to [Releases](https://github.com/mrunknownde/tplink-nvr-export/releases)
+2. Download `nvr-export-gui-windows.exe`
+3. Double-click to run - no installation needed!
+
+![GUI Preview - Connection, Time Range, Export Settings with Progress](docs/gui-preview.png)
+
+### Option 2: Download Windows CLI
+
+1. Go to [Releases](https://github.com/mrunknownde/tplink-nvr-export/releases)
+2. Download `nvr-export-cli-windows.exe`
 3. Run from Command Prompt or PowerShell
 
 ```powershell
-# Example usage
-.\nvr-export-windows.exe export -h 192.168.1.100 -u admin -c 1 -s "2024-12-28" -e "2024-12-29" -o ./exports
+.\nvr-export-cli-windows.exe export -h 192.168.1.100 -u admin -c 1 -s "2024-12-28" -e "2024-12-29" -o ./exports
 ```
 
-### Option 2: Install with pip (Requires Python)
+### Option 3: Install with pip (Requires Python)
 
 ```bash
 # Clone the repository
-git clone https://github.com/johannes/tplink-nvr-export.git
+git clone https://github.com/mrunknownde/tplink-nvr-export.git
 cd tplink-nvr-export
 
 # Install with pip
@@ -45,16 +53,19 @@ pip install -e .
 pipx install .
 ```
 
-### Option 3: Build Windows Executable Locally
+### Option 4: Build Windows Executable Locally
 
 ```bash
 # Install dependencies
 pip install -e ".[dev]"
 
-# Build single-file executable
+# Build CLI executable
 pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
 
-# Executable will be in dist/nvr-export.exe
+# Build GUI executable  
+pyinstaller --onefile --name nvr-export-gui --windowed src/tplink_nvr_export/gui.py
+
+# Executables will be in dist/
 ```
 
 ## NVR Setup
