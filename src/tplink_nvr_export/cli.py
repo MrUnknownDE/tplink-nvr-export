@@ -9,6 +9,7 @@ import click
 
 from . import __version__
 from .auth import AuthenticationError
+from .debug import setup_debug_logging
 from .nvr_client import NVRAPIError, NVRClient
 
 
@@ -56,15 +57,30 @@ DATETIME = DateTimeParamType()
 
 @click.group()
 @click.version_option(version=__version__, prog_name="nvr-export")
-def main():
+@click.option("--debug", "-d", is_flag=True, help="Enable debug logging (shows all API requests/responses)")
+@click.option("--debug-file", type=click.Path(), help="Write debug log to file")
+@click.pass_context
+def main(ctx, debug: bool, debug_file: str):
     """TP-Link Vigi NVR Export Tool.
     
     Export video recordings from TP-Link Vigi NVRs via OpenAPI.
     
     Make sure OpenAPI is enabled on your NVR:
     Settings > Network > OpenAPI (default port: 20443)
+    
+    \b
+    Debug mode:
+        nvr-export --debug export ...
+        nvr-export --debug --debug-file debug.log export ...
     """
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj['debug'] = debug
+    
+    # Setup debug logging
+    setup_debug_logging(enabled=debug, log_file=debug_file)
+    
+    if debug:
+        click.echo("🔧 Debug mode enabled - all API requests will be logged", err=True)
 
 
 @main.command()
@@ -81,7 +97,9 @@ def main():
               help="Recording type filter")
 @click.option("--no-ssl-verify", is_flag=True, default=True, help="Skip SSL certificate verification")
 @click.option("--quiet", "-q", is_flag=True, help="Suppress progress output")
+@click.pass_context
 def export(
+    ctx,
     host: str,
     port: int,
     user: str,
@@ -102,9 +120,9 @@ def export(
         nvr-export export -h 192.168.1.100 -u admin -c 1 \\
             -s "2024-12-28 00:00" -e "2024-12-28 23:59" -o ./exports
         
-        # Export only motion recordings
-        nvr-export export -h 192.168.1.100 -u admin -c 2 \\
-            -s "2024-12-01" -e "2024-12-31" --type motion -o ./exports
+        # Export with debug logging
+        nvr-export --debug export -h 192.168.1.100 -u admin -c 1 \\
+            -s "2024-12-28" -e "2024-12-29" -o ./exports
     """
     output_dir = Path(output)
     
@@ -120,6 +138,8 @@ def export(
             
             if not recordings:
                 click.echo("No recordings found for the specified time range.")
+                if ctx.obj.get('debug'):
+                    click.echo("💡 Tip: Check debug output above for API responses", err=True)
                 return
             
             # Calculate total size
@@ -144,6 +164,9 @@ def export(
         sys.exit(1)
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
+        if ctx.obj.get('debug'):
+            import traceback
+            click.echo(traceback.format_exc(), err=True)
         sys.exit(1)
 
 
@@ -153,7 +176,9 @@ def export(
 @click.option("--user", "-u", required=True, help="Admin username")
 @click.option("--password", "-P", required=True, prompt=True, hide_input=True, help="Admin password")
 @click.option("--no-ssl-verify", is_flag=True, default=True, help="Skip SSL certificate verification")
+@click.pass_context
 def channels(
+    ctx,
     host: str,
     port: int,
     user: str,
@@ -196,7 +221,9 @@ def channels(
 @click.option("--type", "rec_type", default="all",
               type=click.Choice(["all", "continuous", "motion", "alarm"]))
 @click.option("--no-ssl-verify", is_flag=True, default=True)
+@click.pass_context
 def search(
+    ctx,
     host: str,
     port: int,
     user: str,
@@ -214,6 +241,8 @@ def search(
             
             if not recordings:
                 click.echo("No recordings found.")
+                if ctx.obj.get('debug'):
+                    click.echo("💡 Tip: Check debug output above for API responses", err=True)
                 return
             
             total_size = sum(r.size_bytes for r in recordings) / (1024 * 1024)

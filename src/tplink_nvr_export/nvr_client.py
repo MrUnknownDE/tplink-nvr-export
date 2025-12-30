@@ -9,6 +9,7 @@ import requests
 from tqdm import tqdm
 
 from .auth import AuthenticationError, NVRAuthenticator
+from .debug import log_debug, log_error, log_request, log_response, is_debug_enabled
 from .models import Channel, ExportJob, Recording
 
 
@@ -42,6 +43,7 @@ class NVRClient:
         self.base_url = f"https://{host}:{port}"
         self.auth = NVRAuthenticator(host, username, password, port, verify_ssl)
         self._session: Optional[requests.Session] = None
+        log_debug(f"NVRClient initialized for {host}:{port}")
     
     @property
     def session(self) -> requests.Session:
@@ -76,8 +78,20 @@ class NVRClient:
         
         url = f"{self.base_url}{endpoint}"
         
+        # Log request
+        log_request(method, url, kwargs.get('headers'), kwargs.get('json'))
+        
         try:
             response = self.session.request(method, url, timeout=60, **kwargs)
+            
+            # Log response
+            try:
+                response_data = response.json() if response.content else {}
+            except ValueError:
+                response_data = {"raw": response.text[:500] if response.text else "empty"}
+            
+            log_response(response.status_code, dict(response.headers), response_data)
+            
             response.raise_for_status()
             
             # Some endpoints might return empty response
@@ -95,6 +109,7 @@ class NVRClient:
             return data
             
         except requests.RequestException as e:
+            log_error(f"Request to {endpoint} failed", e)
             raise NVRAPIError(f"Request failed: {e}") from e
     
     def get_channels(self) -> list[Channel]:
@@ -114,16 +129,22 @@ class NVRClient:
             ("GET", "device/channels"),
         ]
         
+        log_debug(f"Trying {len(endpoints_to_try)} endpoint patterns for channels")
+        
         for endpoint_info in endpoints_to_try:
             try:
                 method = endpoint_info[0]
                 endpoint = endpoint_info[1]
                 json_data = endpoint_info[2] if len(endpoint_info) > 2 else None
                 
+                log_debug(f"Trying endpoint: {method} {endpoint}")
+                
                 if json_data:
                     data = self._api_request(method, endpoint, json=json_data)
                 else:
                     data = self._api_request(method, endpoint)
+                
+                log_debug(f"Response keys: {list(data.keys()) if data else 'empty'}")
                 
                 # Parse response - try different structures
                 channel_list = (
@@ -136,6 +157,8 @@ class NVRClient:
                     []
                 )
                 
+                log_debug(f"Found {len(channel_list)} channels in response")
+                
                 if channel_list:
                     for ch_data in channel_list:
                         channels.append(Channel(
@@ -145,10 +168,12 @@ class NVRClient:
                         ))
                     return channels
                     
-            except NVRAPIError:
+            except NVRAPIError as e:
+                log_debug(f"Endpoint {endpoint} failed: {e}")
                 continue
         
         # If no channels found via API, return default channels 1-8
+        log_debug("No channels found via API, returning defaults 1-8")
         if not channels:
             for i in range(1, 9):
                 channels.append(Channel(id=i, name=f"Channel {i}", enabled=True))
@@ -181,6 +206,9 @@ class NVRClient:
         # ISO format alternative
         start_iso = start_time.strftime("%Y-%m-%dT%H:%M:%S")
         end_iso = end_time.strftime("%Y-%m-%dT%H:%M:%S")
+        
+        log_debug(f"Searching recordings: channel={channel_id}, start={start_time}, end={end_time}")
+        log_debug(f"Timestamps: start_ts={start_ts}, end_ts={end_ts}")
         
         type_map = {
             "all": 0,
@@ -217,16 +245,27 @@ class NVRClient:
             }),
         ]
         
+        log_debug(f"Trying {len(endpoints_to_try)} endpoint patterns for recordings")
+        
         for endpoint_info in endpoints_to_try:
             try:
                 method = endpoint_info[0]
                 endpoint = endpoint_info[1]
                 json_data = endpoint_info[2] if len(endpoint_info) > 2 and isinstance(endpoint_info[2], dict) else None
                 
+                log_debug(f"Trying endpoint: {method} {endpoint}")
+                
                 if json_data:
                     data = self._api_request(method, endpoint, json=json_data)
                 else:
                     data = self._api_request(method, endpoint)
+                
+                log_debug(f"Response keys: {list(data.keys()) if data else 'empty'}")
+                
+                # Log full response structure for debugging
+                if is_debug_enabled():
+                    import json as json_module
+                    log_debug(f"Full response: {json_module.dumps(data, indent=2, default=str)[:1000]}")
                 
                 # Parse response - try different structures
                 result = data.get("result", data)
@@ -235,11 +274,16 @@ class NVRClient:
                     result.get("recordings", []) or
                     result.get("recordList", []) or
                     result.get("items", []) or
+                    result.get("searchResult", []) or
+                    result.get("list", []) or
                     []
                 )
                 
+                log_debug(f"Found {len(record_list)} recordings in response")
+                
                 if record_list:
                     for rec_data in record_list:
+                        log_debug(f"Recording data: {rec_data}")
                         rec_start = self._parse_timestamp(
                             rec_data.get("start_time", rec_data.get("startTime", rec_data.get("start", 0)))
                         )
@@ -258,9 +302,11 @@ class NVRClient:
                         ))
                     return recordings
                     
-            except NVRAPIError:
+            except NVRAPIError as e:
+                log_debug(f"Endpoint {endpoint} failed: {e}")
                 continue
         
+        log_debug("No recordings found with any endpoint pattern")
         return recordings
     
     def _parse_timestamp(self, ts) -> datetime:
@@ -312,6 +358,8 @@ class NVRClient:
             f"{self.base_url}/openapi/download?recordId={recording.id}",
         ])
         
+        log_debug(f"Download URLs to try: {download_urls}")
+        
         # Determine output filename
         if output_path.is_dir():
             filename = self._generate_filename(recording)
@@ -325,13 +373,18 @@ class NVRClient:
         last_error = None
         for download_url in download_urls:
             try:
+                log_debug(f"Trying download from: {download_url}")
                 response = self.session.get(download_url, stream=True, timeout=300)
+                
+                log_debug(f"Download response: {response.status_code}, Content-Type: {response.headers.get('content-type')}")
+                
                 response.raise_for_status()
                 
                 # Check if response is actually video data
                 content_type = response.headers.get("content-type", "")
                 if "json" in content_type or "html" in content_type:
                     # This is an error response, try next URL
+                    log_debug(f"Got non-video response, trying next URL")
                     continue
                 
                 # Get total size from headers or recording metadata
@@ -348,9 +401,11 @@ class NVRClient:
                             if progress_callback:
                                 progress_callback(downloaded, total_size)
                 
+                log_debug(f"Downloaded {downloaded} bytes to {output_file}")
                 return output_file
                 
             except requests.RequestException as e:
+                log_error(f"Download from {download_url} failed", e)
                 last_error = e
                 continue
         
