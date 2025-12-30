@@ -1,0 +1,103 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -e .
+          
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
+          
+      - name: Test executable
+        run: |
+          ./dist/nvr-export.exe --version
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvr-export-windows
+          path: dist/nvr-export.exe
+          
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -e .
+          
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
+          
+      - name: Make executable
+        run: chmod +x dist/nvr-export
+          
+      - name: Test executable
+        run: |
+          ./dist/nvr-export --version
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvr-export-linux
+          path: dist/nvr-export
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nvr-export-windows
+          path: windows
+          
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nvr-export-linux
+          path: linux
+          
+      - name: Rename artifacts
+        run: |
+          mv windows/nvr-export.exe nvr-export-windows.exe
+          mv linux/nvr-export nvr-export-linux
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            nvr-export-windows.exe
+            nvr-export-linux
+          generate_release_notes: true

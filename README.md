@@ -20,6 +20,19 @@ A CLI tool to export video recordings from TP-Link Vigi NVRs over a specified ti
 
 ## Installation
 
+### Option 1: Download Windows Executable (Recommended for Windows)
+
+1. Go to [Releases](https://github.com/johannes/tplink-nvr-export/releases)
+2. Download `nvr-export-windows.exe`
+3. Run from Command Prompt or PowerShell
+
+```powershell
+# Example usage
+.\nvr-export-windows.exe export -h 192.168.1.100 -u admin -c 1 -s "2024-12-28" -e "2024-12-29" -o ./exports
+```
+
+### Option 2: Install with pip (Requires Python)
+
 ```bash
 # Clone the repository
 git clone https://github.com/johannes/tplink-nvr-export.git
@@ -30,6 +43,18 @@ pip install -e .
 
 # Or with pipx for isolated environment
 pipx install .
+```
+
+### Option 3: Build Windows Executable Locally
+
+```bash
+# Install dependencies
+pip install -e ".[dev]"
+
+# Build single-file executable
+pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
+
+# Executable will be in dist/nvr-export.exe
 ```
 
 ## NVR Setup
