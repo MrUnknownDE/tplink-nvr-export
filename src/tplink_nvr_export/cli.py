@@ -267,5 +267,167 @@ def search(
         sys.exit(1)
 
 
+@main.command()
+@click.option("--host", "-h", required=True, help="NVR IP address or hostname")
+@click.option("--port", "-p", default=20443, help="OpenAPI port (default: 20443)")
+@click.option("--user", "-u", required=True, help="Admin username")
+@click.option("--password", "-P", required=True, prompt=True, hide_input=True, help="Admin password")
+@click.option("--no-ssl-verify", is_flag=True, default=True)
+@click.pass_context
+def discover(
+    ctx,
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    no_ssl_verify: bool,
+):
+    """Discover available API endpoints on the NVR.
+    
+    This command probes many possible API paths to find which ones
+    are available on your NVR. Useful for debugging and development.
+    """
+    import requests
+    
+    # Common endpoints to try
+    endpoints_to_probe = [
+        # Root and info
+        ("GET", "/openapi"),
+        ("GET", "/openapi/"),
+        ("GET", "/openapi/info"),
+        ("GET", "/openapi/version"),
+        ("GET", "/openapi/api"),
+        ("GET", "/openapi/swagger"),
+        ("GET", "/openapi/docs"),
+        
+        # Device/channels
+        ("GET", "/openapi/device"),
+        ("GET", "/openapi/devices"),
+        ("GET", "/openapi/added_devices"),
+        ("GET", "/openapi/channel"),
+        ("GET", "/openapi/channels"),
+        ("GET", "/openapi/channelList"),
+        ("GET", "/openapi/device/info"),
+        ("GET", "/openapi/device/list"),
+        ("GET", "/openapi/device/channels"),
+        ("GET", "/openapi/nvr/info"),
+        ("GET", "/openapi/nvr/channels"),
+        
+        # Recording/playback
+        ("GET", "/openapi/record"),
+        ("GET", "/openapi/records"),
+        ("GET", "/openapi/recording"),
+        ("GET", "/openapi/recordings"),
+        ("GET", "/openapi/playback"),
+        ("GET", "/openapi/video"),
+        ("GET", "/openapi/videos"),
+        ("GET", "/openapi/storage"),
+        ("GET", "/openapi/storage/recordings"),
+        ("GET", "/openapi/hdd"),
+        ("GET", "/openapi/disk"),
+        
+        # Search endpoints
+        ("GET", "/openapi/search"),
+        ("GET", "/openapi/record/list"),
+        ("GET", "/openapi/recording/list"),
+        ("GET", "/openapi/playback/list"),
+        ("GET", "/openapi/video/list"),
+        
+        # Live stream
+        ("GET", "/openapi/live"),
+        ("GET", "/openapi/stream"),
+        ("GET", "/openapi/liveStream"),
+        ("GET", "/openapi/rtsp"),
+        
+        # Events
+        ("GET", "/openapi/event"),
+        ("GET", "/openapi/events"),
+        ("GET", "/openapi/event/list"),
+        ("GET", "/openapi/alarm"),
+        ("GET", "/openapi/alarms"),
+        
+        # Settings
+        ("GET", "/openapi/settings"),
+        ("GET", "/openapi/config"),
+        ("GET", "/openapi/system"),
+        ("GET", "/openapi/sound"),
+        ("GET", "/openapi/network"),
+        
+        # User
+        ("GET", "/openapi/user"),
+        ("GET", "/openapi/users"),
+        ("GET", "/openapi/account"),
+    ]
+    
+    click.echo(f"Connecting to NVR at {host}:{port}...")
+    
+    try:
+        from .auth import NVRAuthenticator
+        
+        auth = NVRAuthenticator(host, user, password, port, verify_ssl=not no_ssl_verify)
+        session = auth.get_authenticated_session()
+        base_url = f"https://{host}:{port}"
+        
+        click.echo(f"Authentication successful!")
+        click.echo(f"\nProbing {len(endpoints_to_probe)} endpoints...\n")
+        
+        found_endpoints = []
+        
+        for method, endpoint in endpoints_to_probe:
+            url = f"{base_url}{endpoint}"
+            try:
+                if method == "GET":
+                    response = session.get(url, timeout=5)
+                else:
+                    response = session.post(url, json={}, timeout=5)
+                
+                status = response.status_code
+                
+                if status == 200:
+                    # Try to get response preview
+                    try:
+                        data = response.json()
+                        preview = str(data)[:100]
+                    except:
+                        preview = response.text[:100] if response.text else "(empty)"
+                    
+                    click.echo(f"✅ {status} {method:4} {endpoint}")
+                    click.echo(f"   Response: {preview}...")
+                    found_endpoints.append((method, endpoint, status))
+                elif status in (400, 401, 403, 405):
+                    # Exists but needs different params/auth
+                    click.echo(f"⚠️  {status} {method:4} {endpoint} (exists but access denied/bad request)")
+                    found_endpoints.append((method, endpoint, status))
+                # 404 = not found, skip silently
+                    
+            except requests.RequestException as e:
+                pass  # Skip connection errors
+        
+        click.echo(f"\n{'='*60}")
+        click.echo(f"Summary: Found {len(found_endpoints)} accessible endpoints")
+        
+        if found_endpoints:
+            click.echo("\nWorking endpoints (200 OK):")
+            for method, endpoint, status in found_endpoints:
+                if status == 200:
+                    click.echo(f"  {method} {endpoint}")
+            
+            click.echo("\nEndpoints that exist but need work:")
+            for method, endpoint, status in found_endpoints:
+                if status != 200:
+                    click.echo(f"  {method} {endpoint} ({status})")
+        else:
+            click.echo("\n⚠️  No working endpoints found!")
+            click.echo("The NVR might use a different API structure.")
+            click.echo("Try checking the NVR web interface with browser DevTools.")
+                
+    except AuthenticationError as e:
+        click.echo(f"Authentication failed: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()
