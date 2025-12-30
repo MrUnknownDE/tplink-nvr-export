@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tplink-nvr-export"
+version = "0.1.0"
+description = "CLI tool to export video recordings from TP-Link Vigi NVRs"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Johannes" }
+]
+keywords = ["tp-link", "vigi", "nvr", "video", "export", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = [
+    "requests>=2.31.0",
+    "click>=8.1.0",
+    "tqdm>=4.66.0",
+    "urllib3>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+nvr-export = "tplink_nvr_export.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/johannes/tplink-nvr-export"
+Repository = "https://github.com/johannes/tplink-nvr-export"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tplink_nvr_export"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
