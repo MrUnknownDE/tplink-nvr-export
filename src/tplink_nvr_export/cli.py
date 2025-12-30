@@ -430,5 +430,125 @@ def discover(
         sys.exit(1)
 
 
+@main.command("login-test")
+@click.option("--host", "-h", required=True, help="NVR IP address or hostname")
+@click.option("--user", "-u", required=True, help="Admin username")
+@click.option("--password", "-P", required=True, prompt=True, hide_input=True, help="Admin password")
+@click.option("--no-ssl-verify", is_flag=True, default=True)
+@click.pass_context
+def login_test(
+    ctx,
+    host: str,
+    user: str,
+    password: str,
+    no_ssl_verify: bool,
+):
+    """Test different login formats to find the correct one.
+    
+    This probes multiple login endpoints and formats to discover
+    how your NVR handles authentication.
+    """
+    import requests
+    import hashlib
+    
+    # Suppress SSL warnings
+    if no_ssl_verify:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    session = requests.Session()
+    session.verify = not no_ssl_verify
+    base_url = f"https://{host}"
+    
+    pw_md5 = hashlib.md5(password.encode()).hexdigest()
+    pw_sha256 = hashlib.sha256(password.encode()).hexdigest()
+    
+    click.echo(f"Testing login formats for {host}...")
+    click.echo(f"Username: {user}")
+    click.echo(f"Password MD5: {pw_md5}")
+    click.echo(f"Password SHA256: {pw_sha256[:32]}...")
+    click.echo("")
+    
+    # Various login formats to try
+    login_attempts = [
+        # Format 1: POST / with JSON method:do login
+        ("POST", "/", {"method": "do", "login": {"username": user, "password": pw_md5}}, "JSON method:do login MD5"),
+        ("POST", "/", {"method": "do", "login": {"username": user, "password": password}}, "JSON method:do login plain"),
+        
+        # Format 2: POST with form data
+        ("POST", "/", {"username": user, "password": pw_md5}, "Form data MD5"),
+        ("POST", "/", {"username": user, "password": password}, "Form data plain"),
+        
+        # Format 3: Different endpoints
+        ("POST", "/login", {"username": user, "password": pw_md5}, "/login endpoint MD5"),
+        ("POST", "/api/login", {"username": user, "password": pw_md5}, "/api/login endpoint"),
+        ("POST", "/cgi-bin/login.cgi", {"username": user, "password": pw_md5}, "/cgi-bin/login.cgi"),
+        
+        # Format 4: JSON-RPC style
+        ("POST", "/", {"jsonrpc": "2.0", "method": "login", "params": {"username": user, "password": pw_md5}}, "JSON-RPC login"),
+        
+        # Format 5: TP-Link specific
+        ("POST", "/", {"method": "login", "data": {"username": user, "password": pw_md5}}, "TP-Link data format"),
+        ("POST", "/", {"operation": "login", "username": user, "password": pw_md5}, "operation:login format"),
+        
+        # Format 6: Try without password hash
+        ("POST", "/", {"method": "do", "login": {"username": user}}, "JSON method:do username only"),
+    ]
+    
+    found_stok = False
+    
+    for method, endpoint, data, description in login_attempts:
+        url = f"{base_url}{endpoint}"
+        try:
+            if isinstance(data, dict) and any(k in ["method", "jsonrpc", "operation"] for k in data.keys()):
+                # JSON request
+                response = session.post(url, json=data, timeout=10)
+            else:
+                # Form data request
+                response = session.post(url, data=data, timeout=10)
+            
+            try:
+                result = response.json()
+                result_str = str(result)[:200]
+                
+                # Check for stok in response
+                stok = None
+                if isinstance(result, dict):
+                    stok = result.get("stok", result.get("result", {}).get("stok", None) if isinstance(result.get("result"), dict) else None)
+                
+                if stok:
+                    click.echo(f"✅ SUCCESS: {description}")
+                    click.echo(f"   URL: {url}")
+                    click.echo(f"   Data: {data}")
+                    click.echo(f"   STOK: {stok}")
+                    found_stok = True
+                elif result.get("error_code", 0) == 0:
+                    click.echo(f"⚠️  {description} - 200 OK but no stok")
+                    click.echo(f"   Response: {result_str}")
+                else:
+                    error_code = result.get("error_code", "unknown")
+                    click.echo(f"❌ {description} - error_code: {error_code}")
+                    
+            except ValueError:
+                if response.status_code == 200:
+                    click.echo(f"⚠️  {description} - 200 OK but not JSON")
+                    click.echo(f"   Response: {response.text[:100]}")
+                    
+        except requests.RequestException as e:
+            click.echo(f"❌ {description} - Connection error: {e}")
+    
+    click.echo("")
+    if found_stok:
+        click.echo("✅ Found working login format! Use the format marked with SUCCESS.")
+    else:
+        click.echo("❌ No working login format found.")
+        click.echo("")
+        click.echo("Please capture the actual login request from your browser:")
+        click.echo("1. Open browser DevTools (F12)")
+        click.echo("2. Go to Network tab")
+        click.echo("3. Log into NVR web interface")
+        click.echo("4. Find the login request and share the Request Payload")
+
+
 if __name__ == "__main__":
     main()
