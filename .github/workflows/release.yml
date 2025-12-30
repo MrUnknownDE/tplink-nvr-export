@@ -25,7 +25,7 @@ jobs:
           
       - name: Build CLI executable
         run: |
-          pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
+          pyinstaller --onefile --name nvr-export --console --collect-submodules tplink_nvr_export nvr_export_cli.py
           
       - name: Test executable
         run: |
@@ -55,7 +55,7 @@ jobs:
           
       - name: Build GUI executable
         run: |
-          pyinstaller --onefile --name nvr-export-gui --windowed --icon=NONE src/tplink_nvr_export/gui.py
+          pyinstaller --onefile --name nvr-export-gui --windowed --collect-submodules tplink_nvr_export nvr_export_gui.py
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -81,7 +81,7 @@ jobs:
           
       - name: Build CLI executable
         run: |
-          pyinstaller --onefile --name nvr-export --console src/tplink_nvr_export/cli.py
+          pyinstaller --onefile --name nvr-export --console --collect-submodules tplink_nvr_export nvr_export_cli.py
           
       - name: Make executable
         run: chmod +x dist/nvr-export
